@@ -1,7 +1,8 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "byteburger",
   "private": true,
   "version": "0.0.0",
+  "description": "Sistema de pedidos via QR Code para hamburguerias - ByteBurger", 
   "type": "module",
   "scripts": {
     "dev": "vite",
