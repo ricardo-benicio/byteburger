@@ -13,19 +13,23 @@ import { menuItems } from '@/data/menuData';
  * - updateItem() modifies existing item
  * - removeItem() removes item from store
  * - Hook returns singleton instance
+ * - Edge cases and input validation
+ * - Order preservation
  */
 
 describe('useMenu', () => {
-  // Reset store state before each test
+  // Reset store state before each test using a more reliable approach
   beforeEach(() => {
-    // Get store and reset to initial state
     const { result } = renderHook(() => useMenu());
     act(() => {
-      // Clear all items first
-      result.current.items.forEach((item) => {
+      // Remove all current items by iterating until empty
+      // This handles cases where items might have been added in previous tests
+      const currentItems = [...result.current.items];
+      currentItems.forEach((item) => {
         result.current.removeItem(item.id);
       });
-      // Re-add initial items
+      
+      // Restore initial state from menuData
       menuItems.forEach((item) => {
         result.current.addItem(item);
       });
@@ -247,6 +251,136 @@ describe('useMenu', () => {
       const { result } = renderHook(() => useMenu());
       expect(result.current.removeItem).toBeDefined();
       expect(typeof result.current.removeItem).toBe('function');
+    });
+  });
+
+  describe('Edge Cases and Input Validation', () => {
+    it('should handle adding item with empty string id', () => {
+      const { result } = renderHook(() => useMenu());
+      const initialLength = result.current.items.length;
+
+      const itemWithEmptyId = {
+        id: '',
+        name: 'Empty ID Item',
+        description: 'Test',
+        price: 10.00,
+        image: '/test.jpg',
+        category: 'burgers' as const,
+      };
+
+      act(() => {
+        result.current.addItem(itemWithEmptyId);
+      });
+
+      expect(result.current.items.length).toBe(initialLength + 1);
+      expect(result.current.items.find(i => i.id === '')).toBeDefined();
+    });
+
+    it('should handle updating non-existent item gracefully', () => {
+      const { result } = renderHook(() => useMenu());
+      const initialLength = result.current.items.length;
+      const firstItem = result.current.items[0];
+
+      act(() => {
+        result.current.updateItem('definitely-non-existent-id', { price: 99.99 });
+      });
+
+      // Should not throw and length should remain the same
+      expect(result.current.items.length).toBe(initialLength);
+      // Other items should remain unchanged
+      expect(result.current.items.find(i => i.id === firstItem.id)?.price).toBe(firstItem.price);
+    });
+
+    it('should preserve item order after multiple operations', () => {
+      const { result } = renderHook(() => useMenu());
+      
+      // Add multiple items
+      const item1 = { id: 'order-test-1', name: 'First', description: 'Test', price: 10, image: '/1.jpg', category: 'burgers' as const };
+      const item2 = { id: 'order-test-2', name: 'Second', description: 'Test', price: 20, image: '/2.jpg', category: 'burgers' as const };
+      const item3 = { id: 'order-test-3', name: 'Third', description: 'Test', price: 30, image: '/3.jpg', category: 'burgers' as const };
+
+      act(() => {
+        result.current.addItem(item1);
+        result.current.addItem(item2);
+        result.current.addItem(item3);
+      });
+
+      const items = result.current.items;
+      const itemIds = items.map(i => i.id);
+      const lastThreeIds = itemIds.slice(-3);
+
+      expect(lastThreeIds).toEqual(['order-test-1', 'order-test-2', 'order-test-3']);
+    });
+
+    it('should handle price value of 0', () => {
+      const { result } = renderHook(() => useMenu());
+      const firstItem = result.current.items[0];
+
+      act(() => {
+        result.current.updateItem(firstItem.id, { price: 0 });
+      });
+
+      const updatedItem = result.current.items.find(i => i.id === firstItem.id);
+      expect(updatedItem?.price).toBe(0);
+    });
+
+    it('should handle very long strings', () => {
+      const { result } = renderHook(() => useMenu());
+      const firstItem = result.current.items[0];
+      const longString = 'a'.repeat(1000);
+
+      act(() => {
+        result.current.updateItem(firstItem.id, { description: longString });
+      });
+
+      const updatedItem = result.current.items.find(i => i.id === firstItem.id);
+      expect(updatedItem?.description).toBe(longString);
+    });
+  });
+
+  describe('State Consistency', () => {
+    it('should maintain state consistency after rapid successive operations', () => {
+      const { result } = renderHook(() => useMenu());
+      
+      act(() => {
+        // Rapid add operations
+        result.current.addItem({ id: 'rapid-1', name: 'Rapid 1', description: 'Test', price: 1, image: '/1.jpg', category: 'burgers' as const });
+        result.current.addItem({ id: 'rapid-2', name: 'Rapid 2', description: 'Test', price: 2, image: '/2.jpg', category: 'burgers' as const });
+        result.current.addItem({ id: 'rapid-3', name: 'Rapid 3', description: 'Test', price: 3, image: '/3.jpg', category: 'burgers' as const });
+      });
+
+      const afterAdd = result.current.items.length;
+
+      act(() => {
+        // Rapid update operations
+        result.current.updateItem('rapid-1', { price: 10 });
+        result.current.updateItem('rapid-2', { price: 20 });
+        result.current.updateItem('rapid-3', { price: 30 });
+      });
+
+      // Verify all updates applied
+      const item1 = result.current.items.find(i => i.id === 'rapid-1');
+      const item2 = result.current.items.find(i => i.id === 'rapid-2');
+      const item3 = result.current.items.find(i => i.id === 'rapid-3');
+
+      expect(item1?.price).toBe(10);
+      expect(item2?.price).toBe(20);
+      expect(item3?.price).toBe(30);
+      expect(result.current.items.length).toBe(afterAdd);
+    });
+
+    it('should handle items array reference stability', () => {
+      const { result, rerender } = renderHook(() => useMenu());
+      const initialItemsRef = result.current.items;
+
+      act(() => {
+        result.current.addItem({ id: 'ref-test', name: 'Ref Test', description: 'Test', price: 10, image: '/test.jpg', category: 'burgers' as const });
+      });
+
+      rerender();
+
+      // After re-render, items array should be a new reference (immutable update)
+      expect(result.current.items).not.toBe(initialItemsRef);
     });
   });
 });
