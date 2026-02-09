@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local tools and docs
+_bmad
+_bmad-output
+.claude
+.opencode
+docs
